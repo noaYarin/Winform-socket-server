@@ -1,14 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
 using System.Net.Sockets;
 using System.Net;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.IO;
 
 namespace Winform_socket_server1
 {
@@ -21,47 +16,74 @@ namespace Winform_socket_server1
 
         private void button1_Click(object sender, EventArgs e)
         {
-            IPHostEntry host = Dns.GetHostEntry(textBox1.Text);
-            IPAddress ipAddress = host.AddressList[0];
-            IPEndPoint localEndPoint = new IPEndPoint(ipAddress, Int32.Parse( textBox2.Text));
+            Console.WriteLine("Server is starting...");
+            byte[] data = new byte[1024];
+            IPEndPoint ip = new IPEndPoint(IPAddress.Any, 9050);
 
-            try
+            Socket newsock = new Socket(AddressFamily.InterNetwork,
+                            SocketType.Stream, ProtocolType.Tcp);
+
+            newsock.Bind(ip);
+            newsock.Listen(10);
+            Console.WriteLine("Waiting for a client...");
+
+            Socket client = newsock.Accept();
+            IPEndPoint newclient = (IPEndPoint)client.RemoteEndPoint;
+            Console.WriteLine("Connected with {0} at port {1}",
+                            newclient.Address, newclient.Port);
+
+            while (true)
             {
-
-                Socket listener = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                listener.Bind(localEndPoint);
-                listener.Listen(10);
-
-                Console.WriteLine("Waiting for a connection...");
-                Socket handler = listener.Accept();
-
-                // Incoming data from the client.
-                string data = null;
-                byte[] bytes = null;
-
-                while (true)
+                data = ReceiveData(client);
+                MemoryStream memoryStream = new MemoryStream(data);
+                
+                try
                 {
-                    bytes = new byte[1024];
-                    int bytesRec = handler.Receive(bytes);
-                    data += Encoding.ASCII.GetString(bytes, 0, bytesRec);
-                    if (data.IndexOf("<EOF>") > -1)
-                    {
-                        break;
-                    }
+                    Image bmp = Image.FromStream(memoryStream);
+                    Console.WriteLine(bmp);
                 }
+                catch (ArgumentException )
+                {
+                    Console.WriteLine("something broke");
+                }
+                if (data.Length == 0)
+                    newsock.Listen(10);
 
-                Console.WriteLine("Text received : {0}", data);
-
-                byte[] msg = Encoding.ASCII.GetBytes(data);
-                handler.Send(msg);
-                handler.Shutdown(SocketShutdown.Both);
-                handler.Close();
-            }
-            catch (Exception error)
-            {
-                Console.WriteLine(error.ToString());
+                client.Close();
+                newsock.Close();
             }
 
         }
+
+        private static byte[] ReceiveData(Socket socket)
+        {
+            Console.WriteLine("Im building the data");
+
+            int total = 0;
+            int imageRecived;
+            byte[] datasize = new byte[1024];
+
+            imageRecived = socket.Receive(datasize, 0, 1024, 0);
+            int size = BitConverter.ToInt32(datasize, 0);
+            int dataleft = size;
+            byte[] data = new byte[size];
+
+
+            while (total < size)
+            {
+                imageRecived = socket.Receive(data, total, dataleft, 0);
+                if (imageRecived == 0)
+                {
+                    break;
+                }
+                total += imageRecived;
+                dataleft -= imageRecived;
+            }
+            Console.WriteLine("I finished the build the data");
+
+            return data;
+
+        }
+
     }
 }
